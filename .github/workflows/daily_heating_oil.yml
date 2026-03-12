@@ -2,40 +2,38 @@ name: Daily Heating Oil Price Alert
 
 on:
 schedule:
-- cron: "0 8 * * *"
+- cron: '0 8 * * *'
 workflow_dispatch:
 
 jobs:
 send_email:
 runs-on: ubuntu-latest
-permissions:
-contents: write
 
 ```
+permissions:
+  contents: write
+
 steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+  - uses: actions/checkout@v4
 
-  - name: Set up Python
-    uses: actions/setup-python@v5
+  - uses: actions/setup-python@v5
     with:
-      python-version: "3.11"
+      python-version: '3.11'
 
-  - name: Install dependencies
-    run: pip install requests beautifulsoup4 matplotlib
+  - run: pip install requests beautifulsoup4 matplotlib
 
-  - name: Run Heating Oil Script
+  - name: Run script
     env:
       GMAIL_USER: ${{ secrets.GMAIL_USER }}
       GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
       EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
     run: python heating_oil_alert.py
 
-  - name: Commit updated price history
+  - name: Commit price history
     run: |
-      git config --global user.name "heating-oil-bot"
+      git config --global user.name "oil-price-bot"
       git config --global user.email "bot@github.com"
       git add heating_oil_prices.csv
-      git commit -m "Update heating oil price history" || echo "No changes to commit"
+      git commit -m "Update price history" || echo "No changes"
       git push
 ```
