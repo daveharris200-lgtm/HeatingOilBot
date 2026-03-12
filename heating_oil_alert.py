@@ -1,29 +1,35 @@
 import smtplib
+import os
 import requests
+import re
 from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
-import os
 
 # --- CONFIG ---
 GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_PASSWORD = os.environ.get("GMAIL_PASSWORD")
 RECIPIENTS = os.environ.get("EMAIL_RECIPIENTS").split(",")
 
+# URL with live UK heating oil price
+URL = "https://uk-public.boilerjuice.com/uk/heating-oil-prices/"
+
 # --- SCRAPE BoilerJuice ---
-url = "https://www.boilerjuice.com/uk/heating-oil-prices"
-response = requests.get(url)
+response = requests.get(URL)
 soup = BeautifulSoup(response.text, "html.parser")
 
-# Find the current average price (pence per litre)
-price_text = soup.find("span", class_="o-curr-price")  # Example selector
-if price_text:
-    price = price_text.text.strip()
+# Convert whole page to text and find pattern "Today’s ... pence per litre"
+text = soup.get_text(separator="\n")
+
+# Regex to match something like "Today’s ...: 60.52 pence per litre"
+match = re.search(r"Today.*?([\d]+\.\d+)\s*pence per litre", text, re.IGNORECASE)
+if match:
+    price = match.group(1)
 else:
     price = "N/A"
 
 # --- EMAIL CONTENT ---
 subject = "UK Heating Oil Price Alert"
-body = f"The current average UK heating oil price is: {price} p/litre"
+body = f"The current average UK heating oil price is: {price} pence per litre (from BoilerJuice)"
 
 msg = MIMEText(body)
 msg["Subject"] = subject
