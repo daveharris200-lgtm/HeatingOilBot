@@ -1,24 +1,45 @@
 name: Daily Heating Oil Price Alert
 
 on:
-  schedule:
-    - cron: '0 8 * * *'
-  workflow_dispatch:
+schedule:
+- cron: '0 8 * * *'   # Runs every day at 08:00 UTC
+workflow_dispatch:      # Allows manual runs from GitHub
 
 jobs:
-  send_email:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install requests beautifulsoup4
-      - name: Run Heating Oil Alert Script
-        env:
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
-          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
-        run: python heating_oil_alert.py
+send_email:
+runs-on: ubuntu-latest
+
+```
+permissions:
+  contents: write
+
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+
+  - name: Set up Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: '3.11'
+
+  - name: Install dependencies
+    run: |
+      pip install requests
+      pip install beautifulsoup4
+      pip install matplotlib
+
+  - name: Run Heating Oil Script
+    env:
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+      EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+    run: python heating_oil_alert.py
+
+  - name: Commit updated price history
+    run: |
+      git config --global user.name "heating-oil-bot"
+      git config --global user.email "bot@github.com"
+      git add heating_oil_prices.csv
+      git commit -m "Update heating oil price history" || echo "No changes to commit"
+      git push
+```
