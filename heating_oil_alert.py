@@ -4,6 +4,7 @@ import requests
 import re
 import csv
 from datetime import datetime
+from statistics import mean
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -28,17 +29,20 @@ match = re.search(r"Today.*?([\d]+\.\d+)\s*pence per litre", text, re.IGNORECASE
 price = float(match.group(1)) if match else None
 today = datetime.utcnow().strftime("%Y-%m-%d")
 
-# --- LOAD PREVIOUS DATA ---
-previous_price = None
-rows = []
+# --- LOAD HISTORY ---
+dates = []
+prices = []
 
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE) as f:
-        rows = list(csv.reader(f))
-        if len(rows) > 1:
-            previous_price = float(rows[-1][1])
+        reader = csv.DictReader(f)
+        for row in reader:
+            dates.append(row["date"])
+            prices.append(float(row["price_ppl"]))
 
-# --- CALCULATE CHANGE ---
+previous_price = prices[-1] if prices else None
+
+# --- DAILY CHANGE ---
 change = None
 trend = "➡"
 
@@ -50,7 +54,27 @@ if previous_price and price:
     elif change < 0:
         trend = "📉"
 
-# --- SAVE DATA ---
+# --- BUY SIGNAL LOGIC ---
+buy_signal = False
+signal_reason = ""
+
+if len(prices) >= 30:
+
+    avg30 = mean(prices[-30:])
+
+    if price < avg30:
+        buy_signal = True
+        signal_reason = "Price below 30-day average"
+
+if len(prices) >= 7:
+
+    weekly_change = price - prices[-7]
+
+    if weekly_change <= -3:
+        buy_signal = True
+        signal_reason = "Price dropped more than 3 ppl in a week"
+
+# --- SAVE TODAY ---
 file_exists = os.path.exists(DATA_FILE)
 
 with open(DATA_FILE, "a", newline="") as f:
@@ -61,18 +85,13 @@ with open(DATA_FILE, "a", newline="") as f:
 
     writer.writerow([today, price])
 
+# --- UPDATE LISTS ---
+dates.append(today)
+prices.append(price)
+
 # --- GENERATE CHART ---
-dates = []
-prices = []
-
-if os.path.exists(DATA_FILE):
-    with open(DATA_FILE) as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            dates.append(row["date"])
-            prices.append(float(row["price_ppl"]))
-
 if len(prices) > 1:
+
     last_dates = dates[-30:]
     last_prices = prices[-30:]
 
@@ -83,25 +102,22 @@ if len(prices) > 1:
     plt.tight_layout()
     plt.savefig(CHART_FILE)
 
-# --- EMAIL CONTENT ---
+# --- EMAIL ---
 msg = MIMEMultipart()
 
-if change is not None:
-    body = f"""
+body = f"""
 UK Heating Oil Price Update
 
 Today's price: {price} pence per litre
 Change from yesterday: {change} ppl {trend}
-
-Source: BoilerJuice
 """
-else:
-    body = f"""
-UK Heating Oil Price Update
 
-Today's price: {price} pence per litre
+if buy_signal:
+    body += f"""
 
-Source: BoilerJuice
+🔥 BUY SIGNAL
+
+Reason: {signal_reason}
 """
 
 msg.attach(MIMEText(body))
@@ -110,18 +126,18 @@ msg["Subject"] = "UK Heating Oil Price Alert"
 msg["From"] = GMAIL_USER
 msg["To"] = ", ".join(RECIPIENTS)
 
-# --- ATTACH WEEKLY CHART (Sunday only) ---
+# --- ATTACH WEEKLY CHART (Sunday) ---
 weekday = datetime.utcnow().weekday()
 
-if weekday == 6 and os.path.exists(CHART_FILE):  # Sunday
+if weekday == 6 and os.path.exists(CHART_FILE):
     with open(CHART_FILE, "rb") as f:
         img = MIMEImage(f.read())
         img.add_header("Content-Disposition", "attachment", filename="heating_oil_chart.png")
         msg.attach(img)
 
-# --- SEND EMAIL ---
+# --- SEND ---
 with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
     server.login(GMAIL_USER, GMAIL_PASSWORD)
     server.sendmail(GMAIL_USER, RECIPIENTS, msg.as_string())
 
-print("Email sent successfully!")
+print("Email sent successfully")
